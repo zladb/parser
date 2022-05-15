@@ -1,7 +1,7 @@
 
 /*
-* ÄÄÆÄÀÏ·¯ °úÁ¦ - scanner ±¸Çö
-* 2020112757 ÄÄÇ»ÅÍÇĞºÎ ±èÀ¯Áø
+* ì»´íŒŒì¼ëŸ¬ ê³¼ì œ - scanner êµ¬í˜„
+* 2020112757 ì»´í“¨í„°í•™ë¶€ ê¹€ìœ ì§„
 */
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -33,10 +33,10 @@ static int linepos = 0; /* current position in LineBuf */
 static int bufsize = 0; /* current size of buffer string */
 static int EOF_flag = FALSE; /* corrects ungetNextChar behavior on EOF */
 
-// ÅäÅ«À» ´ãÀ» ¹è¿­
+// í† í°ì„ ë‹´ì„ ë°°ì—´
 char tokenString[MAXTOKENLEN + 1];
 
-// StateType Á¤ÀÇ
+// StateType ì •ì˜
 typedef enum
 {
     START, INASSIGN, INCOMMENT, INNUM, INID, DONE
@@ -44,7 +44,7 @@ typedef enum
 StateType;
 
 
-// ÅäÅ« Å¸ÀÔ
+// í† í° íƒ€ì…
 typedef enum
 /* book-keeping tokens */
 {
@@ -59,7 +59,7 @@ typedef enum
 	VAR, FUN
 } TokenType;
 
-// ¿¹¾à¾î Å×ÀÌºí
+// ì˜ˆì•½ì–´ í…Œì´ë¸”
 /* lookup table of reserved words */
 static struct
 {
@@ -112,7 +112,7 @@ static void printSpaces(void);
 void printTree(TreeNode* tree);
 
 
-// Parser ±Û·Î¹ú º¯¼öµé
+// Parser ê¸€ë¡œë²Œ ë³€ìˆ˜ë“¤
 static TokenType token; /* holds current token */
 
 /* function prototypes for recursive calls */
@@ -128,9 +128,16 @@ static TreeNode* simple_exp(void);
 static TreeNode* term(void);
 static TreeNode* factor(void);
 
-/* ³»°¡ ¸¸µç Parse ÇÔ¼öµé */
+/* ë‚´ê°€ ë§Œë“  Parse í•¨ìˆ˜ë“¤ */
 TreeNode* declaration_list(void);
 TreeNode* declaration(void);
+
+TreeNode* statement(void);
+TreeNode* expression_stmt(void);
+TreeNode* compound_stmt(void);
+TreeNode* selection_stmt(void);
+TreeNode* iteration_stmt(void);
+TreeNode* return_stmt(void);
 
 
 main(int argc, char* argv[])
@@ -145,10 +152,10 @@ main(int argc, char* argv[])
         exit(1);
     }
 
-	// cÆÄÀÏ ¿­±â
+	// cíŒŒì¼ ì—´ê¸°
     strcpy(pgm, argv[1]);
     if (strchr(pgm, '.') == NULL)
-        strcat(pgm, ".c"); // ´ë¹®ÀÚ?
+        strcat(pgm, ".c"); // ëŒ€ë¬¸ì?
     source = fopen(pgm, "r");
 
     if (source == NULL)
@@ -157,7 +164,7 @@ main(int argc, char* argv[])
         exit(1);
     }
 
-    // °á°ú Ãâ·Â: .txt ÆÄÀÏ¿¡ °á°ú Ãâ·Â.
+    // ê²°ê³¼ ì¶œë ¥: .txt íŒŒì¼ì— ê²°ê³¼ ì¶œë ¥.
     fp = fopen(argv[2], "w");
 	if (fp == NULL)
 	{
@@ -168,7 +175,7 @@ main(int argc, char* argv[])
     listing = fp;
     fprintf(listing, "\nC- COMPILATION: %s\n", pgm);
 
-    // while (getToken() != ENDFILE); // ÆÄÀÏÀÌ ³¡³¯ ¶§ ±îÁö ÅäÅ« ¾ò¾î¿À±â
+    // while (getToken() != ENDFILE); // íŒŒì¼ì´ ëë‚  ë•Œ ê¹Œì§€ í† í° ì–»ì–´ì˜¤ê¸°
 
 	syntaxTree = parse();
 	if (TraceParse) {
@@ -209,7 +216,7 @@ static void ungetNextChar(void)
     if (!EOF_flag) linepos--;
 }
 
-// ¿©±â¼­ ÀÌÁøÅ½»öÇØ¼­ ¼º´ÉÀ» Çâ»ó ½ÃÅ´
+// ì—¬ê¸°ì„œ ì´ì§„íƒìƒ‰í•´ì„œ ì„±ëŠ¥ì„ í–¥ìƒ ì‹œí‚´
 /* lookup an identifier to see if it is a reserved word */
 /* uses linear search */
 static TokenType reservedLookup(char* s)
@@ -235,7 +242,7 @@ TokenType getToken(void)
 	/* holds current token to be returned */
 	TokenType currentToken;
 
-	/* current state - always begins at START : Ã³À½ ½ÃÀÛ start·Î */
+	/* current state - always begins at START : ì²˜ìŒ ì‹œì‘ startë¡œ */
 	StateType state = START;
 
 	/* flag to indicate save to tokenString */
@@ -249,25 +256,25 @@ TokenType getToken(void)
 		switch (state)
 		{
 		case START:
-			if (isdigit(c)) // ¼ıÀÚ
+			if (isdigit(c)) // ìˆ«ì
 				state = INNUM;
-			else if (isalpha(c)) // ¹®ÀÚ
+			else if (isalpha(c)) // ë¬¸ì
 				state = INID;
-			// INASSIGN state ÁøÀÔ Á¶°Ç : <, >, =, !
+			// INASSIGN state ì§„ì… ì¡°ê±´ : <, >, =, !
 			else if ((c == '<') || (c == '>') || (c == '=') || (c == '!')) 
 				state = INASSIGN;
-			else if ((c == ' ') || (c == '\t') || (c == '\n')) // °ø¹é Ã³¸®
+			else if ((c == ' ') || (c == '\t') || (c == '\n')) // ê³µë°± ì²˜ë¦¬
 				save = FALSE;
-			else if (c == '/') // ÁÖ¼® Ã³¸® ºÎºĞ
+			else if (c == '/') // ì£¼ì„ ì²˜ë¦¬ ë¶€ë¶„
 			{
 				// [OTHER]
-				// ´ÙÀ½ ¹®ÀÚ°¡ '*'ÀÏ °æ¿ì INCOMMENT state·Î ÁøÀÔÇÔ.
+				// ë‹¤ìŒ ë¬¸ìê°€ '*'ì¼ ê²½ìš° INCOMMENT stateë¡œ ì§„ì…í•¨.
 				c = getNextChar(); 
 				if (c == '*') { 
 					save = FALSE;
 					state = INCOMMENT;
 				}
-				// ´ÙÀ½ ¹®ÀÚ°¡ '*'°¡ ¾Æ´Ò °æ¿ì, Ä¿¼­¸¦ ´ç±â°í '/'¸¦ ÃÖÁ¾ ÅäÅ«À¸·Î ÀÎ½ÄÇÔ.
+				// ë‹¤ìŒ ë¬¸ìê°€ '*'ê°€ ì•„ë‹ ê²½ìš°, ì»¤ì„œë¥¼ ë‹¹ê¸°ê³  '/'ë¥¼ ìµœì¢… í† í°ìœ¼ë¡œ ì¸ì‹í•¨.
 				else {
 					ungetNextChar();
 					state = DONE;
@@ -292,7 +299,7 @@ TokenType getToken(void)
 				case '*':
 					currentToken = TIMES;
 					break;
-				case ',':	// , Ãß°¡
+				case ',':	// , ì¶”ê°€
 					currentToken = COMMA;
 					break;
 				case '(':
@@ -301,16 +308,16 @@ TokenType getToken(void)
 				case ')':
 					currentToken = RPAREN;
 					break;
-				case '[':	// [ Ãß°¡
+				case '[':	// [ ì¶”ê°€
 					currentToken = LBRAC;
 					break;
-				case ']':	// ] Ãß°¡
+				case ']':	// ] ì¶”ê°€
 					currentToken = RBRAC;
 					break;
-				case '{':	// { Ãß°¡
+				case '{':	// { ì¶”ê°€
 					currentToken = LCBRAC;
 					break;
-				case '}':	// } Ãß°¡
+				case '}':	// } ì¶”ê°€
 					currentToken = RCBRAC;
 					break;
 				case ';':
@@ -324,7 +331,7 @@ TokenType getToken(void)
 			break;
 		case INCOMMENT:
 			save = FALSE;
-			// comment°¡ ³¡³ª±â Àü¿¡ ÆÄÀÏÀÌ ³¡ÀÌ³ª¸é error¸¦ Ãâ·ÂÇÔ.
+			// commentê°€ ëë‚˜ê¸° ì „ì— íŒŒì¼ì´ ëì´ë‚˜ë©´ errorë¥¼ ì¶œë ¥í•¨.
 			if (c == EOF)
 			{
 				state = DONE;
@@ -333,7 +340,7 @@ TokenType getToken(void)
 			}
 			else if (c == '*')
 			{
-				// '*' ´ÙÀ½ ¹®ÀÚ°¡ '/'ÀÏ °æ¿ì, comment°¡ ³¡³ª°í START state·Î µ¹¾Æ°¨.
+				// '*' ë‹¤ìŒ ë¬¸ìê°€ '/'ì¼ ê²½ìš°, commentê°€ ëë‚˜ê³  START stateë¡œ ëŒì•„ê°.
 				c = getNextChar();
 				if (c == '/') {
 					state = START;
@@ -343,8 +350,8 @@ TokenType getToken(void)
 			break;
 		case INASSIGN:
 			state = DONE;
-			char t = tokenString[0]; // ¾Õ¼­ ÀúÀåÇÑ ¹®ÀÚ
-			// µÎ ¹øÂ°·Î ¿À´Â ¹®ÀÚ°¡ '='ÀÌ ¾Æ´Ò °æ¿ì
+			char t = tokenString[0]; // ì•ì„œ ì €ì¥í•œ ë¬¸ì
+			// ë‘ ë²ˆì§¸ë¡œ ì˜¤ëŠ” ë¬¸ìê°€ '='ì´ ì•„ë‹ ê²½ìš°
 			if (c != '=') { // [other]
 				/* backup in the input */
 				ungetNextChar();
@@ -419,8 +426,8 @@ TokenType getToken(void)
 		}
 	}
 	if (TraceScan) {
-		fprintf(listing, "\t%d: ", lineno); // ¶óÀÎ ³Ñ¹ö
-		printToken(currentToken, tokenString);  // UTIL.C¿¡ ÀÖÀ½
+		fprintf(listing, "\t%d: ", lineno); // ë¼ì¸ ë„˜ë²„
+		printToken(currentToken, tokenString);  // UTIL.Cì— ìˆìŒ
 	}
 	return currentToken;
 } /* end getToken */
@@ -518,8 +525,8 @@ TreeNode* declaration(void)
 {
 	TreeNode* t = NULL;
 	switch (token) {
-	case VAR: t = var_declaration(); break; // º¯¼ö Á¤ÀÇ°¡ ³ª¿À¸é
-	case FUN: t = fun_declaration(); break; // ÇÔ¼ö Á¤ÀÇ°¡ ³ª¿À¸é
+	case VAR: t = var_declaration(); break; // ë³€ìˆ˜ ì •ì˜ê°€ ë‚˜ì˜¤ë©´
+	case FUN: t = fun_declaration(); break; // í•¨ìˆ˜ ì •ì˜ê°€ ë‚˜ì˜¤ë©´
 	default: syntaxError("unexpected token -> ");
 		printToken(token, tokenString);
 		token = getToken();
@@ -541,6 +548,65 @@ TreeNode* type_sepcifier(void)
 	}
 	return t;
 }
+
+
+TreeNode* statement(void)
+{
+	TreeNode* t = NULL;
+	switch (token) {
+	case ID:
+	case NUM:
+	case LBRAC:
+	case SEMI: t = expression_stmt(); break;
+
+	case LCBRAC: t = compound_stmt(); break; // {
+	case IF: t = selection_stmt(); break;
+	case WHILE: t = iteration_stmt(); break;
+	case RETURN: t = return_stmt(); break;
+
+	default: syntaxError("unexpected token -> ");
+		printToken(token, tokenString);
+		token = getToken();
+		break;
+	} /* end case */
+	return t;
+}
+
+TreeNode* expression_stmt(void)
+{
+
+}
+
+TreeNode* compound_stmt(void)
+{
+
+}
+
+TreeNode* selection_stmt(void)
+{
+	TreeNode* t = newStmtNode(IfK);
+	match(IF);
+	match(LBRAC);	// (
+	if (t != NULL) t->child[0] = exp();
+	match(RBRAC);	// )
+	if (t != NULL) t->child[1] = statement();
+	if (token == ELSE) {
+		match(ELSE);
+		if (t != NULL) t->child[2] = statement();
+	}
+	return t;
+}
+
+TreeNode* iteration_stmt(void)
+{
+
+}
+
+TreeNode* return_stmt(void)
+{
+
+}
+
 
 TreeNode* stmt_sequence(void)
 {
