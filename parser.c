@@ -80,8 +80,8 @@ void printToken(TokenType token, const char* tokenString);
 // ------------ parser ----------------
 
 typedef enum { DecK, StmtK, ExpK } NodeKind;
-typedef enum { VarK, FunK} DecKind;
-typedef enum { IfK, ElseK, ReturnK, WhileK } StmtKind;
+typedef enum { VarK, FunK, ArrayK} DecKind;
+typedef enum { IfK, ElseK, ReturnK, WhileK, CompoundK } StmtKind;
 typedef enum { RelopK, AddopK, MulopK, ConstK, IdK } ExpKind;
 
 /* ExpType is used for type checking */
@@ -131,7 +131,13 @@ static TreeNode* factor(void);
 /* 내가 만든 Parse 함수들 */
 TreeNode* declaration_list(void);
 TreeNode* declaration(void);
+TreeNode* var_declaration(void);
+TreeNode* fun_declaration(void);
 
+TreeNode* param_list(void);
+TreeNode* param(void);
+
+TreeNode* statement_list(void);
 TreeNode* statement(void);
 TreeNode* expression_stmt(void);
 TreeNode* compound_stmt(void);
@@ -501,6 +507,25 @@ static void match(TokenType expected)
 	}
 }
 
+static ExpType type_specifier()
+{
+	ExpType t_type = VOID;
+
+	switch (token)
+	{
+	case INT:  t_type = INT; token = getToken(); break;
+	case VOID: t_type = VOID; token = getToken(); break;
+	default: {
+		syntaxError("unexpected type ->");
+		printToken(token, tokenString);
+		fprintf(listing, "\n");
+		break;
+	}
+	}
+
+	return t_type;
+}
+
 TreeNode* declaration_list(void)
 {
 	TreeNode* t = declaration();
@@ -524,9 +549,63 @@ TreeNode* declaration_list(void)
 TreeNode* declaration(void)
 {
 	TreeNode* t = NULL;
-	switch (token) {
-	case VAR: t = var_declaration(); break; // 변수 정의가 나오면
-	case FUN: t = fun_declaration(); break; // 함수 정의가 나오면
+	ExpType   decType;
+	char* identifier;
+	//if (token == INT) match(INT);
+	//else if (token == VOID) match(VOID);
+
+	decType = type_specifier();
+	identifier = copyString(tokenString);
+	match(ID);
+
+	switch (token) 
+	{
+	// ; : 변수 
+	case SEMI: t = newDecNode(VarK);
+		if (t != NULL) 
+		{
+			t->type = decType;
+			t->attr.name = identifier;
+		}
+		match(SEMI);
+		break;	
+
+	// [ : 배열
+	case LBRAC: t = newDecNode(ArrayK); 
+		if (t != NULL)
+		{
+			t->type = decType;
+			t->attr.name = identifier;
+		}
+		match(LBRAC);
+		if (t != NULL && token == NUM) {
+			t = newExpNode(ConstK);
+			if ((t != NULL) && (token == NUM))
+				t->attr.val = atoi(tokenString);
+			match(NUM);
+		}
+		else {
+			syntaxError("unexpected token -> ");
+			printToken(token, tokenString);
+			token = getToken();
+		}
+		match(RBRAC);
+		match(SEMI);
+		break;
+
+	// '(' : 함수
+	case LPAREN: t = newExpNode(FunK); 
+		if (t != NULL)
+		{
+			t->type = decType;
+			t->attr.name = identifier;
+		}
+		match(LPAREN);
+		if (t != NULL) t->child[0] = params();
+		match(RPAREN);
+		if (t != NULL) t->child[1] = compound_stmt();
+		break;
+
 	default: syntaxError("unexpected token -> ");
 		printToken(token, tokenString);
 		token = getToken();
@@ -535,20 +614,188 @@ TreeNode* declaration(void)
 	return t;
 }
 
-TreeNode* type_sepcifier(void)
+TreeNode* var_declaration(void) 
 {
 	TreeNode* t = NULL;
-	switch (token) {
-	case INT: match(INT); break;
-	case VOID: match(VOID); break;
+	ExpType   decType;
+	char* identifier;
+
+	decType = type_specifier();
+	identifier = copyString(tokenString);
+	match(ID);
+
+	switch (token)
+	{
+		// ; : 변수 
+	case SEMI: t = newDecNode(VarK);
+		if (t != NULL)
+		{
+			t->type = decType;
+			t->attr.name = identifier;
+		}
+		match(SEMI);
+		break;
+
+		// [ : 배열
+	case LBRAC: t = newDecNode(ArrayK);
+		if (t != NULL)
+		{
+			t->type = decType;
+			t->attr.name = identifier;
+		}
+		match(LBRAC);
+		if (t != NULL && token == NUM) {
+			t = newExpNode(ConstK);
+			if ((t != NULL) && (token == NUM))
+				t->attr.val = atoi(tokenString);
+			match(NUM);
+		}
+		else {
+			syntaxError("unexpected token -> ");
+			printToken(token, tokenString);
+			token = getToken();
+		}
+		match(RBRAC);
+		match(SEMI);
+		break;
+
 	default: syntaxError("unexpected token -> ");
 		printToken(token, tokenString);
 		token = getToken();
 		break;
+	} /* end case */
+
+	return t;
+}
+
+TreeNode* fun_declaration(void) 
+{
+
+}
+
+TreeNode* params(void) {
+	
+}
+
+TreeNode* param_list(void) 
+{
+	TreeNode* t;
+	TreeNode* p;
+	TreeNode* q;
+	int param_count = 0;
+	if (token == VOID)
+	{
+		match(VOID);
+		return NULL;  /* No parameter ,VOID */
+	}
+
+	t = param();
+	p = t;
+	param_count++;
+	while ((t != NULL) && (token == COMMA))
+	{
+		match(COMMA);
+		q = param();
+		if (q != NULL)
+		{
+			param_count++;
+			p->sibling = q;
+			p = q;
+		}
 	}
 	return t;
 }
 
+TreeNode* param(void) 
+{
+	TreeNode* t;
+	ExpType parmType;
+	char* identifier;
+
+	parmType = type_specifier();
+	identifier = copyString(tokenString);
+	match(ID);
+
+	// 배열 파라미터
+	if (token == LBRAC)
+	{
+		match(LBRAC);
+		match(RBRAC);
+
+		t = newDecNode(ArrayK);
+	}
+	// 변수 파라미터
+	else 
+		t = newDecNode(VarK);
+
+	if (t != NULL)
+	{
+		t->type = parmType;
+		t->attr.name = identifier;
+	}
+	return t;
+}
+
+TreeNode* local_declations(void)
+{
+	TreeNode* t = NULL;
+	TreeNode* p = t;
+
+	if ((token == INT) || (token == VOID))
+		t = var_declaration();
+
+	if (t != NULL)
+	{
+		while ((token == INT) || (token == VOID))
+		{
+			TreeNode* q;
+			q = var_declaration();
+			if (q != NULL) 
+			{
+				p->sibling = q;
+				p = q;
+			}
+		}
+	}
+	return t;
+}
+
+TreeNode* compound_stmt(void)
+{
+	TreeNode* t = newStmtNode(CompoundK);
+	match(LCBRAC);
+
+	if ((t != NULL) && (token != RCBRAC)) // compound_stmt의 follow '}'
+	{
+		if ((token == INT) || (token == VOID))
+			t->child[0] = local_declations();
+		if (token != RCBRAC)
+			t->child[1] = statment_list();
+	}
+
+	match(RCBRAC);
+	return t;
+}
+
+TreeNode* statement_list(void)
+{
+	TreeNode* t = NULL;
+	TreeNode* p = t;
+	while (token != RCBRAC)
+	{
+		TreeNode* q;
+		q = statement();
+		if (q != NULL) {
+			if (t == NULL) t = p = q;
+			else /* now p cannot be NULL either */
+			{
+				p->sibling = q;
+				p = q;
+			}
+		}
+	}
+	return t;
+}
 
 TreeNode* statement(void)
 {
@@ -556,7 +803,7 @@ TreeNode* statement(void)
 	switch (token) {
 	case ID:
 	case NUM:
-	case LBRAC:
+	case LPAREN:
 	case SEMI: t = expression_stmt(); break;
 
 	case LCBRAC: t = compound_stmt(); break; // {
@@ -572,15 +819,18 @@ TreeNode* statement(void)
 	return t;
 }
 
+
 TreeNode* expression_stmt(void)
 {
-
+	TreeNode* t = newStmtNode(ExpK);
+	if ((t != NULL) && (token != SEMI) && (token != RBRAC)) 
+	{
+		t = exp();
+	}
+	match(SEMI);
+	return t;
 }
 
-TreeNode* compound_stmt(void)
-{
-
-}
 
 TreeNode* selection_stmt(void)
 {
@@ -599,105 +849,24 @@ TreeNode* selection_stmt(void)
 
 TreeNode* iteration_stmt(void)
 {
-
+	TreeNode* t = newStmtNode(WhileK);
+	match(WHILE);
+	match(LPAREN);	// (
+	if (t != NULL) t->child[0] = exp();
+	match(RPAREN);	// )
+	if (t != NULL) t->child[1] = statement();
+	return t;
 }
 
+// 수정?
 TreeNode* return_stmt(void)
 {
-
-}
-
-
-TreeNode* stmt_sequence(void)
-{
-	TreeNode* t = statement();
-	TreeNode* p = t;
-	while ((token != ENDFILE) && (token != END) &&
-		(token != ELSE) && (token != UNTIL))
-	{
-		TreeNode* q;
-		match(SEMI);
-		q = statement();
-		if (q != NULL) {
-			if (t == NULL) t = p = q;
-			else /* now p cannot be NULL either */
-			{
-				p->sibling = q;
-				p = q;
-			}
-		}
+	TreeNode* t = newStmtNode(ReturnK);
+	match(RETURN);
+	if ((t != NULL) && (token != SEMI)) {
+		t->child[0] = exp();
 	}
-	return t;
-}
-
-TreeNode* statement(void)
-{
-	TreeNode* t = NULL;
-	switch (token) {
-	case IF: t = if_stmt(); break;
-	case REPEAT: t = repeat_stmt(); break;
-	case ID: t = assign_stmt(); break;
-	case READ: t = read_stmt(); break;
-	case WRITE: t = write_stmt(); break;
-	default: syntaxError("unexpected token -> ");
-		printToken(token, tokenString);
-		token = getToken();
-		break;
-	} /* end case */
-	return t;
-}
-
-TreeNode* if_stmt(void)
-{
-	TreeNode* t = newStmtNode(IfK);
-	match(IF);
-	if (t != NULL) t->child[0] = exp();
-	match(THEN);
-	if (t != NULL) t->child[1] = stmt_sequence();
-	if (token == ELSE) {
-		match(ELSE);
-		if (t != NULL) t->child[2] = stmt_sequence();
-	}
-	match(END);
-	return t;
-}
-
-TreeNode* repeat_stmt(void)
-{
-	TreeNode* t = newStmtNode(RepeatK);
-	match(REPEAT);
-	if (t != NULL) t->child[0] = stmt_sequence();
-	match(UNTIL);
-	if (t != NULL) t->child[1] = exp();
-	return t;
-}
-
-TreeNode* assign_stmt(void)
-{
-	TreeNode* t = newStmtNode(AssignK);
-	if ((t != NULL) && (token == ID))
-		t->attr.name = copyString(tokenString);
-	match(ID);
-	match(ASSIGN);
-	if (t != NULL) t->child[0] = exp();
-	return t;
-}
-
-TreeNode* read_stmt(void)
-{
-	TreeNode* t = newStmtNode(ReadK);
-	match(READ);
-	if ((t != NULL) && (token == ID))
-		t->attr.name = copyString(tokenString);
-	match(ID);
-	return t;
-}
-
-TreeNode* write_stmt(void)
-{
-	TreeNode* t = newStmtNode(WriteK);
-	match(WRITE);
-	if (t != NULL) t->child[0] = exp();
+	match(SEMI);
 	return t;
 }
 
@@ -792,18 +961,18 @@ TreeNode* parse(void)
 {
 	TreeNode* t;
 	token = getToken();
-	t = stmt_sequence();
+	t = declaration_list();
 	if (token != ENDFILE)
 		syntaxError("Code ends before file\n");
 	return t;
 }
 
 
-/* Function newStmtNode creates a new statement
+/* Function newDecNode creates a new declaration
  * node for syntax tree construction
  */
 
-TreeNode* newDecNode(DeclarationKind kind)
+TreeNode* newDecNode(DecKind kind)
 {
 	TreeNode* t = (TreeNode*)malloc(sizeof(TreeNode));
 	int i;
@@ -818,6 +987,10 @@ TreeNode* newDecNode(DeclarationKind kind)
 	}
 	return t;
 }
+
+/* Function newStmtNode creates a new statement
+ * node for syntax tree construction
+ */
 
 TreeNode* newStmtNode(StmtKind kind)
 {
