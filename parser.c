@@ -79,13 +79,14 @@ void printToken(TokenType token, const char* tokenString);
 
 // ------------ parser ----------------
 
+
 typedef enum { DecK, StmtK, ExpK } NodeKind;
 typedef enum { VarK, FunK, ArrayK} DecKind;
 typedef enum { IfK, ElseK, ReturnK, WhileK, CompoundK } StmtKind;
 typedef enum { RelopK, AddopK, MulopK, ConstK, IdK } ExpKind;
 
 /* ExpType is used for type checking */
-typedef enum { VOID, INT, Boolean } ExpType;
+typedef enum { Void, Int, Boolean } ExpType;
 
 #define MAXCHILDREN 3
 
@@ -123,10 +124,10 @@ static TreeNode* repeat_stmt(void);
 static TreeNode* assign_stmt(void);
 static TreeNode* read_stmt(void);
 static TreeNode* write_stmt(void);
-static TreeNode* exp(void);
-static TreeNode* simple_exp(void);
-static TreeNode* term(void);
-static TreeNode* factor(void);
+//static TreeNode* exp(void);
+//static TreeNode* simple_exp(void);
+//static TreeNode* term(void);
+//static TreeNode* factor(void);
 
 /* 내가 만든 Parse 함수들 */
 TreeNode* declaration_list(void);
@@ -145,6 +146,9 @@ TreeNode* selection_stmt(void);
 TreeNode* iteration_stmt(void);
 TreeNode* return_stmt(void);
 
+TreeNode* parse(void);
+
+static void printSpaces(void);
 
 main(int argc, char* argv[])
 {
@@ -513,8 +517,8 @@ static ExpType type_specifier()
 
 	switch (token)
 	{
-	case INT:  t_type = INT; token = getToken(); break;
-	case VOID: t_type = VOID; token = getToken(); break;
+	case INT:  t_type = Int; token = getToken(); break;
+	case VOID: t_type = Void; token = getToken(); break;
 	default: {
 		syntaxError("unexpected type ->");
 		printToken(token, tokenString);
@@ -601,7 +605,7 @@ TreeNode* declaration(void)
 			t->attr.name = identifier;
 		}
 		match(LPAREN);
-		if (t != NULL) t->child[0] = params();
+		if (t != NULL) t->child[0] = param_list();
 		match(RPAREN);
 		if (t != NULL) t->child[1] = compound_stmt();
 		break;
@@ -668,14 +672,14 @@ TreeNode* var_declaration(void)
 	return t;
 }
 
-TreeNode* fun_declaration(void) 
-{
-
-}
-
-TreeNode* params(void) {
-	
-}
+//TreeNode* fun_declaration(void) 
+//{
+//
+//}
+//
+//TreeNode* params(void) {
+//	
+//}
 
 TreeNode* param_list(void) 
 {
@@ -770,7 +774,7 @@ TreeNode* compound_stmt(void)
 		if ((token == INT) || (token == VOID))
 			t->child[0] = local_declations();
 		if (token != RCBRAC)
-			t->child[1] = statment_list();
+			t->child[1] = statement_list();
 	}
 
 	match(RCBRAC);
@@ -825,7 +829,7 @@ TreeNode* expression_stmt(void)
 	TreeNode* t = newStmtNode(ExpK);
 	if ((t != NULL) && (token != SEMI) && (token != RBRAC)) 
 	{
-		t = exp();
+		// t = exp();
 	}
 	match(SEMI);
 	return t;
@@ -870,86 +874,91 @@ TreeNode* return_stmt(void)
 	return t;
 }
 
-TreeNode* exp(void)
-{
-	TreeNode* t = simple_exp();
-	if ((token == LT) || (token == EQ)) {
-		TreeNode* p = newExpNode(OpK);
-		if (p != NULL) {
-			p->child[0] = t;
-			p->attr.op = token;
-			t = p;
-		}
-		match(token);
-		if (t != NULL)
-			t->child[1] = simple_exp();
-	}
-	return t;
-}
-
-TreeNode* simple_exp(void)
-{
-	TreeNode* t = term();
-	while ((token == PLUS) || (token == MINUS))
-	{
-		TreeNode* p = newExpNode(OpK);
-		if (p != NULL) {
-			p->child[0] = t;
-			p->attr.op = token;
-			t = p;
-			match(token);
-			t->child[1] = term();
-		}
-	}
-	return t;
-}
-
-TreeNode* term(void)
-{
-	TreeNode* t = factor();
-	while ((token == TIMES) || (token == OVER))
-	{
-		TreeNode* p = newExpNode(OpK);
-		if (p != NULL) {
-			p->child[0] = t;
-			p->attr.op = token;
-			t = p;
-			match(token);
-			p->child[1] = factor();
-		}
-	}
-	return t;
-}
-
-TreeNode* factor(void)
-{
-	TreeNode* t = NULL;
-	switch (token) {
-	case NUM:
-		t = newExpNode(ConstK);
-		if ((t != NULL) && (token == NUM))
-			t->attr.val = atoi(tokenString);
-		match(NUM);
-		break;
-	case ID:
-		t = newExpNode(IdK);
-		if ((t != NULL) && (token == ID))
-			t->attr.name = copyString(tokenString);
-		match(ID);
-		break;
-	case LPAREN:
-		match(LPAREN);
-		t = exp();
-		match(RPAREN);
-		break;
-	default:
-		syntaxError("unexpected token -> ");
-		printToken(token, tokenString);
-		token = getToken();
-		break;
-	}
-	return t;
-}
+//TreeNode* exp(void)
+//{
+//	TreeNode* t = NULL;
+//	if (token == ID) {
+//
+//	}
+//
+//		//simple_exp();
+//	if ((token == LT) || (token == EQ)) {
+//		TreeNode* p = newExpNode(OpK);
+//		if (p != NULL) {
+//			p->child[0] = t;
+//			p->attr.op = token;
+//			t = p;
+//		}
+//		match(token);
+//		if (t != NULL)
+//			t->child[1] = simple_exp();
+//	}
+//	return t;
+//}
+//
+//TreeNode* simple_exp(void)
+//{
+//	TreeNode* t = term();
+//	while ((token == PLUS) || (token == MINUS))
+//	{
+//		TreeNode* p = newExpNode(OpK);
+//		if (p != NULL) {
+//			p->child[0] = t;
+//			p->attr.op = token;
+//			t = p;
+//			match(token);
+//			t->child[1] = term();
+//		}
+//	}
+//	return t;
+//}
+//
+//TreeNode* term(void)
+//{
+//	TreeNode* t = factor();
+//	while ((token == TIMES) || (token == OVER))
+//	{
+//		TreeNode* p = newExpNode(OpK);
+//		if (p != NULL) {
+//			p->child[0] = t;
+//			p->attr.op = token;
+//			t = p;
+//			match(token);
+//			p->child[1] = factor();
+//		}
+//	}
+//	return t;
+//}
+//
+//TreeNode* factor(void)
+//{
+//	TreeNode* t = NULL;
+//	switch (token) {
+//	case NUM:
+//		t = newExpNode(ConstK);
+//		if ((t != NULL) && (token == NUM))
+//			t->attr.val = atoi(tokenString);
+//		match(NUM);
+//		break;
+//	case ID:
+//		t = newExpNode(IdK);
+//		if ((t != NULL) && (token == ID))
+//			t->attr.name = copyString(tokenString);
+//		match(ID);
+//		break;
+//	case LPAREN:
+//		match(LPAREN);
+//		t = exp();
+//		match(RPAREN);
+//		break;
+//	default:
+//		syntaxError("unexpected token -> ");
+//		printToken(token, tokenString);
+//		token = getToken();
+//		break;
+//	}
+//	return t;
+//}
 
 /****************************************/
 /* the primary function of the parser   */
@@ -1076,17 +1085,17 @@ void printTree(TreeNode* tree)
 			case IfK:
 				fprintf(listing, "If\n");
 				break;
-			case RepeatK:
-				fprintf(listing, "Repeat\n");
+			case ElseK:
+				fprintf(listing, "Else\n");
 				break;
-			case AssignK:
-				fprintf(listing, "Assign to: %s\n", tree->attr.name);
+			case ReturnK:
+				fprintf(listing, "Return : %s\n", tree->attr.name);
 				break;
-			case ReadK:
-				fprintf(listing, "Read: %s\n", tree->attr.name);
+			case WhileK:
+				fprintf(listing, "While\n");
 				break;
-			case WriteK:
-				fprintf(listing, "Write\n");
+			case CompoundK:
+				fprintf(listing, "Compound \n");
 				break;
 			default:
 				fprintf(listing, "Unknown ExpNode kind\n");
@@ -1096,8 +1105,12 @@ void printTree(TreeNode* tree)
 		else if (tree->nodekind == ExpK)
 		{
 			switch (tree->kind.exp) {
-			case OpK:
-				fprintf(listing, "Op: ");
+			//case OpK:
+			//	fprintf(listing, "Op: ");
+			//	printToken(tree->attr.op, "\0");
+			//	break;
+			case RelopK:
+				fprintf(listing, "RelOp: ");
 				printToken(tree->attr.op, "\0");
 				break;
 			case ConstK:
