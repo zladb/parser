@@ -1,6 +1,6 @@
 
 /*
-* 컴파일러 과제 - scanner 구현
+* 컴파일러 과제 - parser 구현
 * 2020112757 컴퓨터학부 김유진
 */
 
@@ -153,8 +153,7 @@ TreeNode* additive_exp(TreeNode* pass);
 TreeNode* term(TreeNode* pass);
 TreeNode* factor(TreeNode* pass);
 
-TreeNode* var(void);
-TreeNode* call(void);
+TreeNode* var_or_call(void);
 TreeNode* args(void);
 
 TreeNode* parse(void);
@@ -869,13 +868,27 @@ TreeNode* iteration_stmt(void)
 // 수정?
 TreeNode* return_stmt(void)
 {
-	TreeNode* t = newStmtNode(ReturnK);
+	//TreeNode* t = newStmtNode(ReturnK);
+	//match(RETURN);
+	//if ((t != NULL) && (token != SEMI)) 
+	//	t->child[0] = exp();
+	//match(SEMI);
+	//return t;
+	TreeNode* tree;
+	TreeNode* expr = NULL;
+
 	match(RETURN);
-	if ((t != NULL) && (token != SEMI)) {
-		t->child[0] = exp();
-	}
+
+	tree = newStmtNode(ReturnK);
+	if (token != SEMI) 		//follow(return_statement)
+		expr = exp();
+
+	if (tree != NULL)
+		tree->child[0] = expr;
+
 	match(SEMI);
-	return t;
+
+	return tree;
 }
 
 // 고쳐야함!!
@@ -889,7 +902,7 @@ TreeNode* exp(void)
 
 	if (token == ID) 
 	{
-		left = var();
+		left = var_or_call();
 		gotLvalue = TRUE;
 	}
 
@@ -1007,8 +1020,7 @@ TreeNode* factor(TreeNode* pass)
 
 	if (token == ID)
 	{
-		t = var();
-		if (t == NULL) t = call(); // 변수가 아니면 함수다!!
+		t = var_or_call();
 	}
 	else if (token == LPAREN)
 	{
@@ -1036,9 +1048,10 @@ TreeNode* factor(TreeNode* pass)
 	return t;
 }
 
-TreeNode* var(void) 
+TreeNode* var_or_call(void) 
 {
 	TreeNode* t = NULL;
+	TreeNode* arguments = NULL;
 	char* identifier = NULL;
 
 	// 먼저 ID 처리 (변수인지 배열인지 모름)
@@ -1046,48 +1059,64 @@ TreeNode* var(void)
 		identifier = copyString(tokenString);
 	match(ID);
 
-	// 배열인 경우
-	if (token == LBRAC)
+	// 함수인 경우
+	if (token == LPAREN)
 	{
-		t = newDecNode(ArrayK);
-		//t->isArray = TRUE;
-		//t->type = Int;
-		match(LBRAC);		// [
-		t->child[0] = exp();
-		match(RBRAC);		// ]
-	}
-	else
-		t = newExpNode(IdK);
+		match(LPAREN);
+		arguments = args();
+		if (t != NULL) {
+			t->child[0] = arguments;
 
-	t->attr.name = identifier;
-
-	return t;
-}
-
-TreeNode* call(void)
-{
-	TreeNode* t = newStmtNode(CallK);
-	TreeNode* arguments = NULL;
-
-	if ((t!=NULL) && token == ID) 
-		t->attr.name = copyString(tokenString);
-	match(ID);
-
-	if (token != LPAREN) printf("%c", token);
-	match(LPAREN);
-	arguments = args();
-	if (t != NULL) {
-		t->child[0] = arguments;
-
-		if (arguments != NULL)
-			t->param_size = arguments->param_size;
-		else
-			t->param_size = 0;
+			if (arguments != NULL)
+				t->param_size = arguments->param_size;
+			else
+				t->param_size = 0;
+		}
 		match(RPAREN);
 	}
+	else 
+	{
+		// 배열인 경우
+		if (token == LBRAC)
+		{
+			t = newDecNode(ArrayK);
+			//t->isArray = TRUE;
+			//t->type = Int;
+			match(LBRAC);		// [
+			t->child[0] = exp();
+			match(RBRAC);		// ]
+		}
+		else
+			t = newExpNode(IdK);
 
+		t->attr.name = identifier;
+	}
 	return t;
 }
+
+//TreeNode* call(void)
+//{
+//	TreeNode* t = newStmtNode(CallK);
+//	TreeNode* arguments = NULL;
+//
+//	if ((t!=NULL) && token == ID) 
+//		t->attr.name = copyString(tokenString);
+//	match(ID);
+//
+//	match(LPAREN);
+//	arguments = args();
+//	if (t != NULL) {
+//		t->child[0] = arguments;
+//
+//		if (arguments != NULL)
+//			t->param_size = arguments->param_size;
+//		else
+//			t->param_size = 0;
+//		match(RPAREN);
+//	}
+//
+//	return t;
+//}
 
 TreeNode* args(void)
 {
