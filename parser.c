@@ -104,6 +104,7 @@ typedef struct treeNode
 	} attr;
 
 	int value; // array index!
+	int isArray;
 	int isParameter;
 	int isGlobal;
 	int param_size;
@@ -159,6 +160,8 @@ TreeNode* args(void);
 TreeNode* parse(void);
 
 static void printSpaces(void);
+
+static int global_size = 0;
 
 main(int argc, char* argv[])
 {
@@ -529,7 +532,8 @@ static ExpType type_specifier()
 	{
 	case INT:  t_type = Int; token = getToken(); break;
 	case VOID: t_type = Void; token = getToken(); break;
-	default: {
+	default: 
+	{
 		syntaxError("unexpected type ->");
 		printToken(token, tokenString);
 		fprintf(listing, "\n");
@@ -580,6 +584,7 @@ TreeNode* declaration(void)
 		{
 			t->type = decType;
 			t->attr.name = identifier;
+			global_size++;
 		}
 		match(SEMI);
 		break;	
@@ -593,9 +598,8 @@ TreeNode* declaration(void)
 		}
 		match(LBRAC);
 		if (t != NULL && token == NUM) {
-			t = newExpNode(ConstK);
-			if ((t != NULL) && (token == NUM))
-				t->attr.val = atoi(tokenString);
+			//t = newExpNode(ConstK);
+			t->value = atoi(tokenString);
 			match(NUM);
 		}
 		else {
@@ -656,12 +660,14 @@ TreeNode* var_declaration(void)
 		{
 			t->type = decType;
 			t->attr.name = identifier;
+			t->local_size = 1;
 		}
 		match(LBRAC);
 		if (t != NULL && token == NUM) {
-			t = newExpNode(ConstK);
-			if ((t != NULL) && (token == NUM))
-				t->attr.val = atoi(tokenString);
+			//t = newExpNode(ConstK);
+			t->value = atoi(tokenString);
+			t->local_size = t->value;
+			t->isArray = TRUE;
 			match(NUM);
 		}
 		else {
@@ -696,18 +702,21 @@ TreeNode* param_list(void)
 	}
 
 	t = param();
-	p = t;
-	param_count++;
-	while ((t != NULL) && (token == COMMA))
-	{
-		match(COMMA);
-		q = param();
-		if (q != NULL)
+	if (t != NULL) {
+		p = t;
+		param_count++;
+		while ((t != NULL) && (token == COMMA))
 		{
-			param_count++;
-			p->sibling = q;
-			p = q;
+			match(COMMA);
+			q = param();
+			if (q != NULL)
+			{
+				param_count++;
+				p->sibling = q;
+				p = q;
+			}
 		}
+		t->param_size = param_count;
 	}
 	return t;
 }
@@ -729,6 +738,7 @@ TreeNode* param(void)
 		match(RBRAC);
 
 		t = newDecNode(ArrayK);
+		t->isArray = TRUE;
 	}
 	// 변수 파라미터
 	else 
@@ -738,6 +748,8 @@ TreeNode* param(void)
 	{
 		t->type = parmType;
 		t->attr.name = identifier;
+		t->value = 0;
+		t->isParameter = TRUE;
 	}
 	return t;
 }
@@ -746,6 +758,8 @@ TreeNode* local_declations(void)
 {
 	TreeNode* t = NULL;
 	TreeNode* p = t;
+	TreeNode* temp;
+	int local_var = 0;
 
 	if ((token == INT) || (token == VOID))
 		t = var_declaration();
@@ -763,6 +777,12 @@ TreeNode* local_declations(void)
 			}
 		}
 	}
+	temp = t;
+	while (temp != NULL) {
+		local_var = local_var + temp->local_size;
+		temp = temp->sibling;
+	}
+	t->local_size = local_var;
 	return t;
 }
 
@@ -787,13 +807,12 @@ TreeNode* statement_list(void)
 {
 	TreeNode* t = NULL;
 	TreeNode* p = t;
-	while (token != RCBRAC)
+	while (token != RCBRAC)	// follow(statement_list)
 	{
 		TreeNode* q;
 		q = statement();
 		if (q != NULL) {
-			if (t == NULL) t = p = q;
-			else /* now p cannot be NULL either */
+			if(p != NULL)
 			{
 				p->sibling = q;
 				p = q;
@@ -828,8 +847,8 @@ TreeNode* statement(void)
 
 TreeNode* expression_stmt(void)
 {
-	TreeNode* t = newStmtNode(ExpK);
-	if ((t != NULL) && (token != SEMI) && (token != RBRAC)) 
+	TreeNode* t = NULL;
+	if ((token != SEMI) && (token != RCBRAC)) 
 	{
 		t = exp();
 	}
@@ -1051,6 +1070,7 @@ TreeNode* factor(TreeNode* pass)
 TreeNode* var_or_call(void) 
 {
 	TreeNode* t = NULL;
+	TreeNode* exptemp = NULL;
 	TreeNode* arguments = NULL;
 	char* identifier = NULL;
 
@@ -1064,15 +1084,18 @@ TreeNode* var_or_call(void)
 	{
 		match(LPAREN);
 		arguments = args();
+		match(RPAREN);
+		
+		t = newStmtNode(CallK);
+
 		if (t != NULL) {
 			t->child[0] = arguments;
-
+			t->attr.name = identifier;
 			if (arguments != NULL)
 				t->param_size = arguments->param_size;
 			else
 				t->param_size = 0;
 		}
-		match(RPAREN);
 	}
 	else 
 	{
@@ -1080,16 +1103,21 @@ TreeNode* var_or_call(void)
 		if (token == LBRAC)
 		{
 			t = newDecNode(ArrayK);
-			//t->isArray = TRUE;
-			//t->type = Int;
+			t->isArray = TRUE;
+			t->type = Int;
 			match(LBRAC);		// [
-			t->child[0] = exp();
+			exptemp = exp();
 			match(RBRAC);		// ]
 		}
+		// expression
 		else
 			t = newExpNode(IdK);
 
-		t->attr.name = identifier;
+		if (t != NULL)
+		{
+			t->child[0] = exptemp;
+			t->attr.name = identifier;
+		}
 	}
 	return t;
 }
