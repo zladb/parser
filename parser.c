@@ -612,7 +612,7 @@ TreeNode* declaration(void)
 		break;
 
 	// '(' : 함수
-	case LPAREN: t = newExpNode(FunK); 
+	case LPAREN: t = newDecNode(FunK); 
 		if (t != NULL)
 		{
 			t->type = decType;
@@ -757,32 +757,34 @@ TreeNode* param(void)
 TreeNode* local_declations(void)
 {
 	TreeNode* t = NULL;
-	TreeNode* p = t;
+	TreeNode* p;
+	TreeNode* q;
 	TreeNode* temp;
 	int local_var = 0;
 
-	if ((token == INT) || (token == VOID))
+	if ((token == VOID) || (token == INT))
 		t = var_declaration();
 
 	if (t != NULL)
 	{
-		while ((token == INT) || (token == VOID))
+		p = t;
+		while ((token == VOID) || (token == INT))
 		{
-			TreeNode* q;
 			q = var_declaration();
-			if ((q != NULL) && (p!=NULL)) 
+			if (q != NULL)
 			{
 				p->sibling = q;
 				p = q;
 			}
 		}
+
+		temp = t;
+		while (temp != NULL) {
+			local_var = local_var + temp->local_size;
+			temp = temp->sibling;
+		}
+		t->local_size = local_var;
 	}
-	temp = t;
-	while (temp != NULL) {
-		local_var = local_var + temp->local_size;
-		temp = temp->sibling;
-	}
-	t->local_size = local_var;
 	return t;
 }
 
@@ -805,20 +807,44 @@ TreeNode* compound_stmt(void)
 
 TreeNode* statement_list(void)
 {
+	//TreeNode* t = NULL;
+	//TreeNode* p = t;
+	//while (token != RCBRAC)	// follow(statement_list)
+	//{
+	//	TreeNode* q;
+	//	q = statement();
+	//	if (q != NULL) {
+	//		if(p != NULL)
+	//		{
+	//			p->sibling = q;
+	//			p = q;
+	//		}
+	//	}
+	//}
+	//return t;
+
 	TreeNode* t = NULL;
-	TreeNode* p = t;
-	while (token != RCBRAC)	// follow(statement_list)
+	TreeNode* p;
+	TreeNode* q;
+
+	/*first statement */
+	if (token != RCBRAC)	// Follow(statement_list)={ '}' }
 	{
-		TreeNode* q;
-		q = statement();
-		if (q != NULL) {
-			if(p != NULL)
+		t = statement();
+		p = t;
+
+		/*subsequest statement */
+		while (token != RCBRAC)
+		{
+			q = statement();
+			if ((p != NULL) && (q != NULL))
 			{
 				p->sibling = q;
 				p = q;
 			}
 		}
 	}
+
 	return t;
 }
 
@@ -927,6 +953,7 @@ TreeNode* exp(void)
 
 	if ((gotLvalue == TRUE) && (token == ASSIGN)) 
 	{
+		printf("left->kind.dec = %d\n", left->kind.dec);
 		if ((left != NULL) && 
 			((left->nodekind == ExpK) || (left->nodekind == DecK)) &&
 			((left->kind.exp == IdK)||(left->kind.dec == ArrayK)))
@@ -943,7 +970,7 @@ TreeNode* exp(void)
         }
         else
         { 
-            syntaxError("attempt to assign to something not an lvalue\n"); // 수정
+            syntaxError("Left can't assign to something.\n"); // 수정
             token = getToken();
         }
 	}
@@ -956,29 +983,31 @@ TreeNode* exp(void)
 TreeNode* simple_exp(TreeNode* pass)
 {
 	TreeNode* t;
-	TreeNode* lexp = NULL;
-	TreeNode* rexp = NULL;
-	
-	lexp = additive_exp(pass);
+	TreeNode* left = NULL;
+	TreeNode* right = NULL;
+	TokenType relop;
+
+	left = additive_exp(pass);
 
 
 	if ((token == GTE) || (token == GT) || 
 		(token == LTE) || (token == LT) || 
 		(token == EQ) || (token == NEQ))
 	{ 
+		relop = token;
 		match(token);
-		rexp = additive_exp(NULL);
+		right = additive_exp(NULL);
 
 		t = newExpNode(OpK);
 		if (t != NULL)
 		{
-			t->child[0] = lexp;
-			t->child[1] = rexp;
-			t->attr.op = token;
+			t->child[0] = left;
+			t->child[1] = right;
+			t->attr.op = relop;
 		}
 	}
 	else
-		t = lexp;
+		t = left;
 
 	return t;
 }
@@ -1075,27 +1104,29 @@ TreeNode* var_or_call(void)
 	char* identifier = NULL;
 
 	// 먼저 ID 처리 (변수인지 배열인지 모름)
-	if (token == ID)
+	if (token == ID) {
 		identifier = copyString(tokenString);
-	match(ID);
+		match(ID);
+	}
 
 	// 함수인 경우
 	if (token == LPAREN)
 	{
-		match(LPAREN);
-		arguments = args();
-		match(RPAREN);
-		
 		t = newStmtNode(CallK);
 
+		match(LPAREN);
+		//arguments = args();
 		if (t != NULL) {
-			t->child[0] = arguments;
+			t->child[0] = args();
 			t->attr.name = identifier;
-			if (arguments != NULL)
-				t->param_size = arguments->param_size;
+			if (t->child[0] != NULL)
+				t->param_size = t->child[0]->param_size;
 			else
 				t->param_size = 0;
 		}
+		match(RPAREN);
+		
+
 	}
 	else 
 	{
@@ -1211,9 +1242,10 @@ TreeNode* newDecNode(DecKind kind)
 	else {
 		for (i = 0; i < MAXCHILDREN; i++) t->child[i] = NULL;
 		t->sibling = NULL;
-		t->nodekind = StmtK;
+		t->nodekind = DecK;
 		t->kind.stmt = kind;
 		t->lineno = lineno;
+		t->type = Void;
 	}
 	return t;
 }
@@ -1332,7 +1364,7 @@ void printTree(TreeNode* tree)
 			case OpK:
 				fprintf(listing, "[Operator \"");
 				printToken(tree->attr.op, "");
-				// fprintf(listing, "\"]\n");
+				// printf("tree-> attr.op = %s\n", (tree->attr.op == OVER) ? "OVER" : "NOT OVER");
 				break;
 			case IdK:
 				fprintf(listing, "[Identifier \"%s", tree->attr.name);
