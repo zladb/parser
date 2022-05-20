@@ -104,12 +104,6 @@ typedef struct treeNode
 	} attr;
 
 	int value; // array index!
-	int isArray;
-	int isParameter;
-	int isGlobal;
-	int param_size;
-	int local_size;
-	int scope;
 
 	ExpType type; /* for type checking of exps */
 } TreeNode;
@@ -569,8 +563,6 @@ TreeNode* declaration(void)
 	TreeNode* t = NULL;
 	ExpType   decType;
 	char* identifier;
-	//if (token == INT) match(INT);
-	//else if (token == VOID) match(VOID);
 
 	decType = type_specifier();
 	identifier = copyString(tokenString);
@@ -584,7 +576,6 @@ TreeNode* declaration(void)
 		{
 			t->type = decType;
 			t->attr.name = identifier;
-			global_size++;
 		}
 		match(SEMI);
 		break;	
@@ -595,14 +586,17 @@ TreeNode* declaration(void)
 		{
 			t->type = decType;
 			t->attr.name = identifier;
+			t->value = -1;	// 크기가 없는 배열
 		}
 		match(LBRAC);
-		if (t != NULL && token == NUM) {
-			//t = newExpNode(ConstK);
+		if (t != NULL && token == NUM) 
+		{
 			t->value = atoi(tokenString);
+			printf("%d\n", t->value);
 			match(NUM);
 		}
-		else {
+		else 
+		{
 			syntaxError("unexpected token -> ");
 			printToken(token, tokenString);
 			token = getToken();
@@ -660,14 +654,12 @@ TreeNode* var_declaration(void)
 		{
 			t->type = decType;
 			t->attr.name = identifier;
-			t->local_size = 1;
+			t->value = -1;	// 크기가 없는 배열
 		}
 		match(LBRAC);
 		if (t != NULL && token == NUM) {
-			//t = newExpNode(ConstK);
 			t->value = atoi(tokenString);
-			t->local_size = t->value;
-			t->isArray = TRUE;
+			printf("%d\n", t->value);
 			match(NUM);
 		}
 		else {
@@ -716,7 +708,6 @@ TreeNode* param_list(void)
 				p = q;
 			}
 		}
-		t->param_size = param_count;
 	}
 	return t;
 }
@@ -738,7 +729,6 @@ TreeNode* param(void)
 		match(RBRAC);
 
 		t = newDecNode(ArrayK);
-		t->isArray = TRUE;
 	}
 	// 변수 파라미터
 	else 
@@ -749,7 +739,6 @@ TreeNode* param(void)
 		t->type = parmType;
 		t->attr.name = identifier;
 		t->value = 0;
-		t->isParameter = TRUE;
 	}
 	return t;
 }
@@ -777,13 +766,6 @@ TreeNode* local_declations(void)
 				p = q;
 			}
 		}
-
-		temp = t;
-		while (temp != NULL) {
-			local_var = local_var + temp->local_size;
-			temp = temp->sibling;
-		}
-		t->local_size = local_var;
 	}
 	return t;
 }
@@ -953,7 +935,6 @@ TreeNode* exp(void)
 
 	if ((gotLvalue == TRUE) && (token == ASSIGN)) 
 	{
-		printf("left->kind.dec = %d\n", left->kind.dec);
 		if ((left != NULL) && 
 			((left->nodekind == ExpK) || (left->nodekind == DecK)) &&
 			((left->kind.exp == IdK)||(left->kind.dec == ArrayK)))
@@ -1088,7 +1069,7 @@ TreeNode* factor(TreeNode* pass)
 	}
 	else
 	{
-		syntaxError("unexpected token ");
+		syntaxError("unexpected token : ");
 		printToken(token, tokenString);
 		fprintf(listing, "\n");
 		token = getToken();
@@ -1115,14 +1096,10 @@ TreeNode* var_or_call(void)
 		t = newStmtNode(CallK);
 
 		match(LPAREN);
-		//arguments = args();
-		if (t != NULL) {
+		if (t != NULL) 
+		{
 			t->child[0] = args();
 			t->attr.name = identifier;
-			if (t->child[0] != NULL)
-				t->param_size = t->child[0]->param_size;
-			else
-				t->param_size = 0;
 		}
 		match(RPAREN);
 		
@@ -1134,8 +1111,9 @@ TreeNode* var_or_call(void)
 		if (token == LBRAC)
 		{
 			t = newDecNode(ArrayK);
-			t->isArray = TRUE;
+			//t->isArray = TRUE;
 			t->type = Int;
+			t->value = -1;
 			match(LBRAC);		// [
 			exptemp = exp();
 			match(RBRAC);		// ]
@@ -1152,30 +1130,6 @@ TreeNode* var_or_call(void)
 	}
 	return t;
 }
-
-//TreeNode* call(void)
-//{
-//	TreeNode* t = newStmtNode(CallK);
-//	TreeNode* arguments = NULL;
-//
-//	if ((t!=NULL) && token == ID) 
-//		t->attr.name = copyString(tokenString);
-//	match(ID);
-//
-//	match(LPAREN);
-//	arguments = args();
-//	if (t != NULL) {
-//		t->child[0] = arguments;
-//
-//		if (arguments != NULL)
-//			t->param_size = arguments->param_size;
-//		else
-//			t->param_size = 0;
-//		match(RPAREN);
-//	}
-//
-//	return t;
-//}
 
 TreeNode* args(void)
 {
@@ -1205,7 +1159,6 @@ TreeNode* args_list(void)
 			p = q;
 		}
 	}
-	t->param_size = arg_count;
 
 	return t;
 }
@@ -1339,21 +1292,21 @@ void printTree(TreeNode* tree)
 			switch (tree->kind.dec)
 			{
 			case VarK:
-				fprintf(listing, "[Variable declaration \"%s\" of type \"%s\"]\n"
+				fprintf(listing, "VARIABLE : %s, TYPE : %s\n"
 					, tree->attr.name, tree->type == Int ? "Integer" : "Void");
 				break;
 			case ArrayK:
-				fprintf(listing, "[Array declaration \"%s\" of size %d"
-					" and type \"%s\"]\n",
+				fprintf(listing, "ARRAY : %s, SIZE: %d"
+					", TYPE: %s\n",
 					tree->attr.name, tree->value, tree->type == Int ? "Integer" : "Void");
 				break;
 			case FunK:
-				fprintf(listing, "[Function declaration \"%s()\""
-					" of return type \"%s\"]\n",
+				fprintf(listing, "FUNCTION : %s()"
+					", RETURN TYPE : %s\n",
 					tree->attr.name, tree->type == Int ? "Integer" : "Void");
 				break;
 			default:
-				fprintf(listing, "<<<unknown declaration type>>>\n");
+				fprintf(listing, "<<<Unknown DecNode kind>>>\n");
 				break;
 			}
 		}
@@ -1362,24 +1315,20 @@ void printTree(TreeNode* tree)
 			switch (tree->kind.exp)
 			{
 			case OpK:
-				fprintf(listing, "[Operator \"");
+				fprintf(listing, "OP : ");
 				printToken(tree->attr.op, "");
-				// printf("tree-> attr.op = %s\n", (tree->attr.op == OVER) ? "OVER" : "NOT OVER");
 				break;
 			case IdK:
-				fprintf(listing, "[Identifier \"%s", tree->attr.name);
-				if (tree->value != 0) /* array indexing */
-					fprintf(listing, "[%d]", tree->value);
-				fprintf(listing, "\"]\n");
+				fprintf(listing, "ID : %s\n", tree->attr.name);
 				break;
 			case ConstK:
-				fprintf(listing, "[Literal constant \"%d\"]\n", tree->attr.val);
+				fprintf(listing, "CONST : %d\n", tree->attr.val);
 				break;
 			case AssignK:
-				fprintf(listing, "[Assignment]\n");
+				fprintf(listing, "ASSIGN\n");
 				break;
 			default:
-				fprintf(listing, "<<<unknown expression type>>>\n");
+				fprintf(listing, "<<<Unknown ExpNode kind>>>\n");
 				break;
 			}
 		}
@@ -1388,23 +1337,22 @@ void printTree(TreeNode* tree)
 			switch (tree->kind.stmt)
 			{
 			case CompoundK:
-				fprintf(listing, "[Compound statement]\n");
+				fprintf(listing, "COMPOUND\n");
 				break;
 			case IfK:
-				fprintf(listing, "[IF statement]\n");
+				fprintf(listing, "IF\n");
 				break;
 			case WhileK:
-				fprintf(listing, "[WHILE statement]\n");
+				fprintf(listing, "WHILE\n");
 				break;
 			case ReturnK:
-				fprintf(listing, "[RETURN statement]\n");
+				fprintf(listing, "RETURN\n");
 				break;
 			case CallK:
-				fprintf(listing, "[Call to function \"%s() %d\"]\n",
-					tree->attr.name, (tree->child[0]) != NULL ? (tree->child[0])->param_size : 0);
+				fprintf(listing, "CALL %s()\n", tree->attr.name);
 				break;
 			default:
-				fprintf(listing, "<<<unknown statement type>>>\n");
+				fprintf(listing, "<<<Unknown StmtNode kind>>>\n");
 				break;
 			}
 		}
@@ -1420,64 +1368,3 @@ void printTree(TreeNode* tree)
 	UNINDENT;
 }
 
-/* procedure printTree prints a syntax tree to the
- * listing file using indentation to indicate subtrees
- */
-//void printTree(TreeNode* tree)
-//{
-//	int i;
-//	INDENT;
-//	while (tree != NULL) {
-//		printSpaces();
-//		if (tree->nodekind == StmtK)
-//		{
-//			switch (tree->kind.stmt) {
-//			case IfK:
-//				fprintf(listing, "If\n");
-//				break;
-//			case ElseK:
-//				fprintf(listing, "Else\n");
-//				break;
-//			case ReturnK:
-//				fprintf(listing, "Return : %s\n", tree->attr.name);
-//				break;
-//			case WhileK:
-//				fprintf(listing, "While\n");
-//				break;
-//			case CompoundK:
-//				fprintf(listing, "Compound \n");
-//				break;
-//			default:
-//				fprintf(listing, "Unknown ExpNode kind\n");
-//				break;
-//			}
-//		}
-//		else if (tree->nodekind == ExpK)
-//		{
-//			switch (tree->kind.exp) {
-//			//case OpK:
-//			//	fprintf(listing, "Op: ");
-//			//	printToken(tree->attr.op, "\0");
-//			//	break;
-//			case RelopK:
-//				fprintf(listing, "RelOp: ");
-//				printToken(tree->attr.op, "\0");
-//				break;
-//			case ConstK:
-//				fprintf(listing, "Const: %d\n", tree->attr.val);
-//				break;
-//			case IdK:
-//				fprintf(listing, "Id: %s\n", tree->attr.name);
-//				break;
-//			default:
-//				fprintf(listing, "Unknown ExpNode kind\n");
-//				break;
-//			}
-//		}
-//		else fprintf(listing, "Unknown node kind\n");
-//		for (i = 0; i < MAXCHILDREN; i++)
-//			printTree(tree->child[i]);
-//		tree = tree->sibling;
-//	}
-//	UNINDENT;
-//}
